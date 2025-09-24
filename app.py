@@ -387,7 +387,7 @@ with gr.Blocks() as demo:
         block      = gr.Slider(4, 64, value=DEFAULT_BLOCK, step=1, label="Cell size (pixels)")
         max_side   = gr.Slider(256, 2048, value=800, step=32, label="Max side (pre-resize)")
     with gr.Row():
-        # feature    = gr.Textbox(value="RGB", label="Color space for matching")
+        feature    = gr.Textbox(value="RGB", label="Color space for matching")
         tile_limit = gr.Slider(16, 1000, value=256, step=16, label="Max tiles to load")
     used_gallery  = gr.Gallery(label="Tiles used (subset)", columns=10, height=140)
 
