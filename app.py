@@ -176,7 +176,7 @@ def build_photomosaic(
     # return which tiles were used as thumbnails
     used = sorted(set(idx_map.reshape(-1).tolist()))
     used_swatches = [tiles_resized[i] for i in used[:100]]  # cap gallery size
-    return out, used_swatches, f"Cells: {rows}×{cols} = {rows*cols}, Tiles loaded: {len(tiles_resized)}, KDTree: {HAVE_KDTREE}"
+    return out, used_swatches
 
 # ==================== Gradio UI ====================
 with gr.Blocks() as demo:
@@ -198,7 +198,7 @@ with gr.Blocks() as demo:
     gr.Button("Build Photomosaic").click(
         build_photomosaic,
         [img_in, dataset, block, max_side, feature, tile_limit],
-        [mosaic_out, used_gallery, status],
+        [mosaic_out, used_gallery],
     )
 
 if __name__ == "__main__":
