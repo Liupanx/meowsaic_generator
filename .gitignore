@@ -2,4 +2,4 @@
 __pycache__/
 flagged/
 .gradio/
-.DS_Storedatasets/
+.datasets/
