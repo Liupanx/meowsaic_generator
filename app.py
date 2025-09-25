@@ -62,12 +62,49 @@ def center_crop_square(arr: np.ndarray) -> np.ndarray:
     x0 = (W - s) // 2
     return arr[y0:y0+s, x0:x0+s]
 
-def per_cell_mean(arr: np.ndarray, block: int) -> np.ndarray:
-    """Mean RGB per cell → (rows, cols, 3) float32 in [0,255]."""
+def adaptive_cells_mean(arr: np.ndarray, block: int, detail_thresh: float = 18.0, min_block: int = 8):
+    """
+    Return a list of rectangles and their mean RGBs.
+    Rect = (y0, x0, size). For high-detail cells, splits once into 4 subcells.
+    """
     H, W, C = arr.shape
-    rows, cols = H // block, W // block
-    tiles = arr.reshape(rows, block, cols, block, C).swapaxes(1, 2) 
-    return tiles.mean(axis=(2, 3), dtype=np.float32)
+    H2 = (H // block) * block
+    W2 = (W // block) * block
+    base = arr[:H2, :W2]
+
+    rects = []              # [(y0, x0, size), ...]
+    means = []              # [(r,g,b) float32, ...]
+    half = max(min_block, block // 2)
+
+    def cell_detail(patch: np.ndarray) -> float:
+        # max per-channel std is a good, cheap detail score
+        s = patch.reshape(-1, C).astype(np.float32).std(axis=0)
+        return float(s.max())
+
+    for y0 in range(0, H2, block):
+        for x0 in range(0, W2, block):
+            patch = base[y0:y0+block, x0:x0+block]
+            d = cell_detail(patch)
+
+            if d > detail_thresh and block > min_block:
+                # split once into 4 subcells of size=half
+                y1, x1 = y0 + half, x0 + half
+                quads = [
+                    (y0, x0, half), (y0, x1, half),
+                    (y1, x0, half), (y1, x1, half),
+                ]
+                for (yy, xx, sz) in quads:
+                    p = base[yy:yy+sz, xx:xx+sz]
+                    m = p.reshape(-1, C).mean(axis=0).astype(np.float32)
+                    rects.append((yy, xx, sz))
+                    means.append(m)
+            else:
+                # keep whole cell
+                m = patch.reshape(-1, C).mean(axis=0).astype(np.float32)
+                rects.append((y0, x0, block))
+                means.append(m)
+
+    return rects, np.stack(means, axis=0)  # means shape: (N,3)
 
 
 # ==================== dataset tiles ====================
@@ -123,51 +160,47 @@ def nearest_index(query_vec: np.ndarray, feats: np.ndarray, tree=None) -> int:
     return int(np.argmin(d2))
 
 # ==================== mosaic pipeline ====================
-def build_photomosaic(
-    img,
-    repo_id: str,     # Hugging Face dataset repo, e.g. "GalaxyRaccon/cat_images"
-    block: int,
-    max_side: int,
-    feature_space: str,
-    tile_limit: int,
-):
-    # --- prep target image ---
+def build_photomosaic(img, repo_id: str, block: int, max_side: int,
+                      feature_space: str, tile_limit: int):
+
+    if img is None:
+        raise gr.Error("Please upload an image first.")
+
     base = img_to_nparr(img)
     base = resize_np(base, max_side=max_side)
-    base = trim_to_multiple_np(base, block)
-    H, W = base.shape[:2]
-    rows, cols = H // block, W // block
 
-    # --- load tiles from HF dataset ---
+    # 1) Get adaptive cells + their mean RGBs
+    rects, target_feats = adaptive_cells_mean(base, block=block,
+                                              detail_thresh=18.0,  # tweak in UI if you want
+                                              min_block=max(4, block // 4))
+
+    # 2) Load tiles once (same as before)
     tiles_raw = load_tiles_from_hf(repo_id, limit=tile_limit)
-    tiles_resized = [
-        np.array(Image.fromarray(t).resize((block, block), Image.LANCZOS), dtype=np.uint8)
-        for t in tiles_raw
-    ]
 
-    feats = compute_features(tiles_raw, feature_space)
+    # Pillow 10 compatibility for LANCZOS
+    LANCZOS = getattr(Image, "Resampling", Image).LANCZOS
+
+    # Keep one copy at max size; we’ll resize per-rect
+    tiles_rgb = [np.asarray(Image.fromarray(t), dtype=np.uint8) for t in tiles_raw]
+
+    feats = compute_features(tiles_raw, feature_space)   # (T,3)
     tree = build_index(feats)
 
-    # --- compute per-cell features ---
-    rgb_cells = per_cell_mean(base, block)
-    target_feats = rgb_cells.reshape(-1, 3)
+    # 3) Paste matched tiles per rectangle (adaptive sizes)
+    out = np.zeros_like(base, dtype=np.uint8)
+    used_idx = set()
 
-    # --- choose tiles + paste ---
-    out = np.zeros_like(base)
-    idx_map = np.zeros((rows, cols), dtype=np.int32)
-    n = 0
-    for r in range(rows):
-        for c in range(cols):
-            q = target_feats[n]
-            idx = nearest_index(q, feats, tree)
-            idx_map[r, c] = idx
-            tile = tiles_resized[idx]
-            y0, x0 = r * block, c * block
-            out[y0:y0+block, x0:x0+block] = tile
-            n += 1
+    for (y0, x0, sz), q in zip(rects, target_feats):
+        idx = nearest_index(q, feats, tree)
+        used_idx.add(idx)
+        tile = tiles_rgb[idx]
+        # resize tile to the rect size
+        tile_resized = np.array(Image.fromarray(tile).resize((sz, sz), LANCZOS), dtype=np.uint8)
+        out[y0:y0+sz, x0:x0+sz] = tile_resized
 
-    used = sorted(set(idx_map.reshape(-1).tolist()))
-    used_swatches = [tiles_resized[i] for i in used[:100]]
+    used_swatches = [np.array(Image.fromarray(tiles_rgb[i]).resize((block, block), LANCZOS), dtype=np.uint8)
+                     for i in list(used_idx)[:100]]
+
     return out, used_swatches
 
 
