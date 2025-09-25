@@ -6,6 +6,7 @@ from PIL import Image
 import gradio as gr
 import cv2
 from pathlib import Path
+from datasets import load_dataset
 
 try:
     from scipy.spatial import cKDTree
@@ -70,6 +71,8 @@ def per_cell_mean(arr: np.ndarray, block: int) -> np.ndarray:
 
 
 # ==================== dataset tiles ====================
+
+
 def list_dataset_images(folder: str, limit: int) -> List[str]:
     if not os.path.isdir(folder):
         raise gr.Error(f"Folder not found: {folder}")
@@ -81,19 +84,16 @@ def list_dataset_images(folder: str, limit: int) -> List[str]:
         raise gr.Error(f"No images found in {folder} (allowed: {sorted(ALLOWED_EXTS)})")
     return paths[:max(1, int(limit))]
 
-def load_and_prepare_tiles(folder: str, limit: int) -> List[np.ndarray]:
+def load_tiles_from_hf(repo_id: str, split="train", limit=256) -> list[np.ndarray]:
     """Load images, center-crop to square, keep as uint8 RGB np arrays."""
-    paths = list_dataset_images(folder, limit)
+    ds = load_dataset(repo_id, split=split, streaming=False)
     tiles = []
-    for p in paths:
-        try:
-            arr = img_to_nparr(Image.open(p))
-            tiles.append(center_crop_square(arr))
-        except Exception:
-            # skip unreadable files silently
-            continue
+    for ex in ds.select(range(min(limit, len(ds)))):
+        img = ex["image"]        
+        arr = img_to_nparr(img)  
+        tiles.append(center_crop_square(arr))
     if not tiles:
-        raise gr.Error(f"Could not load any valid images from {folder}")
+        raise gr.Error("No images found in Hugging Face dataset")
     return tiles
 
 def compute_features(tiles: List[np.ndarray], feature_space: str) -> np.ndarray:
@@ -122,18 +122,14 @@ def nearest_index(query_vec: np.ndarray, feats: np.ndarray, tree=None) -> int:
     d2 = ((feats - query_vec[None, :]) ** 2).sum(axis=1)
     return int(np.argmin(d2))
 
-def resolve_folder(folder: str) -> Path:
-    base = Path(__file__).resolve().parent
-    return (base / folder).resolve()
-
-# ==================== mosaic ====================
+# ==================== mosaic pipeline ====================
 def build_photomosaic(
-    img,                 # uploaded image (PIL or np)
-    dataset_folder: str, # e.g., "datasets"
-    block: int,          # cell size in px
-    max_side: int,       # pre-resize max side
-    feature_space: str,  # "Lab" or "RGB"
-    tile_limit: int,     # max dataset images to use
+    img,
+    repo_id: str,     # Hugging Face dataset repo, e.g. "GalaxyRaccon/cat_images"
+    block: int,
+    max_side: int,
+    feature_space: str,
+    tile_limit: int,
 ):
     # --- prep target image ---
     base = img_to_nparr(img)
@@ -142,21 +138,18 @@ def build_photomosaic(
     H, W = base.shape[:2]
     rows, cols = H // block, W // block
 
-    # --- get absolute path of the image dataset folder ---
-    abs_dataset_folder = resolve_folder(dataset_folder)
-    # --- load dataset tiles, compute features, build index ---
-    tiles_raw = load_and_prepare_tiles(abs_dataset_folder, tile_limit)  # list[np.uint8]
-    # resize all tiles once to block size (avoid resizing per cell)
+    # --- load tiles from HF dataset ---
+    tiles_raw = load_tiles_from_hf(repo_id, limit=tile_limit)
     tiles_resized = [
         np.array(Image.fromarray(t).resize((block, block), Image.LANCZOS), dtype=np.uint8)
         for t in tiles_raw
     ]
+
     feats = compute_features(tiles_raw, feature_space)
     tree = build_index(feats)
 
-    # --- compute per-cell feature for target ---
-
-    rgb_cells = per_cell_mean(base, block)  # (rows, cols, 3)
+    # --- compute per-cell features ---
+    rgb_cells = per_cell_mean(base, block)
     target_feats = rgb_cells.reshape(-1, 3)
 
     # --- choose tiles + paste ---
@@ -173,10 +166,10 @@ def build_photomosaic(
             out[y0:y0+block, x0:x0+block] = tile
             n += 1
 
-    # return which tiles were used as thumbnails
     used = sorted(set(idx_map.reshape(-1).tolist()))
-    used_swatches = [tiles_resized[i] for i in used[:100]]  # cap gallery size
+    used_swatches = [tiles_resized[i] for i in used[:100]]
     return out, used_swatches
+
 
 # ==================== Gradio UI ====================
 with gr.Blocks() as demo:
@@ -187,17 +180,16 @@ with gr.Blocks() as demo:
         mosaic_out = gr.Image(type="numpy", label="Photomosaic", format="jpeg")
 
     with gr.Row():
-        dataset    = gr.Textbox(value="datasets", label="Dataset folder path")
-        block      = gr.Slider(4, 64, value=DEFAULT_BLOCK, step=1, label="Cell size (pixels)")
-        max_side   = gr.Slider(256, 2048, value=800, step=32, label="Max side (pre-resize)")
+        block      = gr.Slider(4, 64, value=DEFAULT_BLOCK, step=1)
+        max_side   = gr.Slider(256, 2048, value=800, step=32)
     with gr.Row():
-        feature    = gr.Textbox(value="RGB", label="Color space for matching")
-        tile_limit = gr.Slider(16, 1000, value=256, step=16, label="Max tiles to load")
-    used_gallery  = gr.Gallery(label="Tiles used (subset)", columns=10, height=140)
+        feature    = gr.Textbox(value="RGB", label="Color space")
+        tile_limit = gr.Slider(16, 1000, value=256, step=16)
+    used_gallery  = gr.Gallery(label="Tiles used", columns=10, height=140)
 
     gr.Button("Build Photomosaic").click(
         build_photomosaic,
-        [img_in, dataset, block, max_side, feature, tile_limit],
+        [img_in, gr.State("GalaxyRaccon/cat_images"), block, max_side, feature, tile_limit],
         [mosaic_out, used_gallery],
     )
 

@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -e
-git lfs install
-git lfs pull
