@@ -143,9 +143,9 @@ def build_photomosaic(
     rows, cols = H // block, W // block
 
     # --- get absolute path of the image dataset folder ---
-    resolve_folder(dataset_folder)
+    abs_dataset_folder = resolve_folder(dataset_folder)
     # --- load dataset tiles, compute features, build index ---
-    tiles_raw = load_and_prepare_tiles(dataset_folder, tile_limit)  # list[np.uint8]
+    tiles_raw = load_and_prepare_tiles(abs_dataset_folder, tile_limit)  # list[np.uint8]
     # resize all tiles once to block size (avoid resizing per cell)
     tiles_resized = [
         np.array(Image.fromarray(t).resize((block, block), Image.LANCZOS), dtype=np.uint8)
