@@ -180,11 +180,11 @@ with gr.Blocks() as demo:
         mosaic_out = gr.Image(type="numpy", label="Photomosaic", format="jpeg")
 
     with gr.Row():
-        block      = gr.Slider(4, 64, value=DEFAULT_BLOCK, step=1)
-        max_side   = gr.Slider(256, 2048, value=800, step=32)
+        block      = gr.Slider(4, 64, value=DEFAULT_BLOCK, step=1, label="Grid size")
+        max_side   = gr.Slider(256, 2048, value=800, step=32, label="Image size")
     with gr.Row():
         feature    = gr.Textbox(value="RGB", label="Color space")
-        tile_limit = gr.Slider(16, 1000, value=256, step=16)
+        tile_limit = gr.Slider(16, 1000, value=256, step=16, label="Image variance")
     used_gallery  = gr.Gallery(label="Tiles used", columns=10, height=140)
 
     gr.Button("Build Photomosaic").click(
