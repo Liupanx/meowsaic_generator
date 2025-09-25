@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 import gradio as gr
 import cv2
+from pathlib import Path
 
 try:
     from scipy.spatial import cKDTree
@@ -121,6 +122,9 @@ def nearest_index(query_vec: np.ndarray, feats: np.ndarray, tree=None) -> int:
     d2 = ((feats - query_vec[None, :]) ** 2).sum(axis=1)
     return int(np.argmin(d2))
 
+def resolve_folder(folder: str) -> Path:
+    base = Path(__file__).resolve().parent
+    return (base / folder).resolve()
 
 # ==================== mosaic ====================
 def build_photomosaic(
@@ -171,7 +175,6 @@ def build_photomosaic(
     used = sorted(set(idx_map.reshape(-1).tolist()))
     used_swatches = [tiles_resized[i] for i in used[:100]]  # cap gallery size
     return out, used_swatches, f"Cells: {rows}×{cols} = {rows*cols}, Tiles loaded: {len(tiles_resized)}, KDTree: {HAVE_KDTREE}"
-
 
 # ==================== Gradio UI ====================
 with gr.Blocks() as demo:
