@@ -198,7 +198,7 @@ with gr.Blocks() as demo:
     gr.Button("Build Photomosaic").click(
         build_photomosaic,
         [img_in, dataset, block, max_side, feature, tile_limit],
-        [mosaic_out, used_gallery],
+        [mosaic_out, used_gallery, status],
     )
 
 if __name__ == "__main__":
