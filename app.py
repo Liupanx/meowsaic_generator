@@ -14,7 +14,7 @@ try:
 except Exception:
     HAVE_KDTREE = False
 
-DEFAULT_BLOCK = 32   # cell size in pixels
+DEFAULT_BLOCK = 32
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 # ==================== image utils ====================
@@ -72,12 +72,11 @@ def adaptive_cells_mean(arr: np.ndarray, block: int, detail_thresh: float = 18.0
     W2 = (W // block) * block
     base = arr[:H2, :W2]
 
-    rects = []              # [(y0, x0, size), ...]
-    means = []              # [(r,g,b) float32, ...]
+    rects = []              
+    means = []              
     half = max(min_block, block // 2)
 
     def cell_detail(patch: np.ndarray) -> float:
-        # max per-channel std is a good, cheap detail score
         s = patch.reshape(-1, C).astype(np.float32).std(axis=0)
         return float(s.max())
 
@@ -87,7 +86,6 @@ def adaptive_cells_mean(arr: np.ndarray, block: int, detail_thresh: float = 18.0
             d = cell_detail(patch)
 
             if d > detail_thresh and block > min_block:
-                # split once into 4 subcells of size=half
                 y1, x1 = y0 + half, x0 + half
                 quads = [
                     (y0, x0, half), (y0, x1, half),
@@ -104,7 +102,7 @@ def adaptive_cells_mean(arr: np.ndarray, block: int, detail_thresh: float = 18.0
                 rects.append((y0, x0, block))
                 means.append(m)
 
-    return rects, np.stack(means, axis=0)  # means shape: (N,3)
+    return rects, np.stack(means, axis=0)  
 
 
 # ==================== dataset tiles ====================
@@ -146,7 +144,7 @@ def compute_features(tiles: List[np.ndarray], feature_space: str) -> np.ndarray:
     return feats
 
 def build_index(feats: np.ndarray):
-    """Return a KD-Tree if available, else None (we’ll brute-force)."""
+    """Return a KD-Tree indexing with rgb number"""
     if HAVE_KDTREE:
         return cKDTree(feats)
     return None
@@ -171,7 +169,7 @@ def build_photomosaic(img, repo_id: str, block: int, max_side: int,
 
     # 1) Get adaptive cells + their mean RGBs
     rects, target_feats = adaptive_cells_mean(base, block=block,
-                                              detail_thresh=18.0,  # tweak in UI if you want
+                                              detail_thresh=18.0,  
                                               min_block=max(4, block // 4))
 
     # 2) Load tiles once (same as before)
