@@ -12,7 +12,7 @@ pinned: false
 # 🐱 Meowsaic Generator ⚡
 
 Turn any picture into a mosaic made entirely of cat photos. Upload an image, tweak the settings, and let cats rebuild your scene.
-
+Try it here: https://huggingface.co/spaces/GalaxyRaccon/meowsaic_generator
 ---
 
 ## 🖼️ How to Use
