@@ -107,7 +107,6 @@ def adaptive_cells_mean(arr: np.ndarray, block: int, detail_thresh: float = 18.0
 
 # ==================== dataset tiles ====================
 
-
 def list_dataset_images(folder: str, limit: int) -> List[str]:
     if not os.path.isdir(folder):
         raise gr.Error(f"Folder not found: {folder}")
@@ -134,7 +133,6 @@ def load_tiles_from_hf(repo_id: str, split="train", limit=256) -> list[np.ndarra
 def compute_features(tiles: List[np.ndarray], feature_space: str) -> np.ndarray:
     """
     Return (T,3) features per tile.
-    - 'Lab'  : mean in CIE Lab (requires skimage)
     - 'RGB'  : mean in RGB
     """
     T = len(tiles)
