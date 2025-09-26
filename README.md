@@ -15,6 +15,11 @@ Turn any picture into a mosaic made entirely of cat photos. Upload an image, twe
 Try it here: https://huggingface.co/spaces/GalaxyRaccon/meowsaic_generator
 ---
 
+## 🎥 Demo
+[![Watch the demo](https://img.youtube.com/vi/Pt_AbSFCcrs/0.jpg)](https://www.youtube.com/watch?v=Pt_AbSFCcrs)
+
+
+
 ## 🖼️ How to Use
 
 1. **Upload an image**  
